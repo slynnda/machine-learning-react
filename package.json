@@ -15,5 +15,12 @@
   "bugs": {
     "url": "https://github.com/argonauthills/machine-learning-react/issues"
   },
-  "homepage": "https://github.com/argonauthills/machine-learning-react"
+  "homepage": "https://github.com/argonauthills/machine-learning-react",
+  "devDependencies": {
+    "webpack": "^1.8.10"
+  },
+  "dependencies": {
+    "lodash": "^3.7.0",
+    "react": "^0.13.2"
+  }
 }
