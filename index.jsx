@@ -1,11 +1,12 @@
 var React = require('react')
 var _ = require('lodash')
+var keypress = require('keypress')
 
-console.log("working")
 var GAMEBOARD_WIDTH = 100
 var PADDLE_HEIGHT = 20
+var HALF_PADDLE_HEIGHT = PADDLE_HEIGHT/2
 var PADDLE_WIDTH = 3
-var HALF_PADDLE = PADDLE_HEIGHT/2
+var HALF_PADDLE_WIDTH = PADDLE_WIDTH/2
 
 var gameState = {
     leftPaddle: {
@@ -35,8 +36,9 @@ var GameBoard = React.createClass({
     },
 
     render: function() {
+        var viewBox = "0 0 " + GAMEBOARD_WIDTH + " " + GAMEBOARD_WIDTH
         return (
-            <svg {...this.props} onMouseMove={this.onMouseMove}>
+            <svg {...this.props} viewBox={viewBox} onMouseMove={this.onMouseMove}>
                 <Paddle paddle={this.props.gameState.leftPaddle}/>
                 <Paddle paddle={this.props.gameState.rightPaddle}/>
             </svg>
@@ -46,8 +48,8 @@ var GameBoard = React.createClass({
 
 var Paddle = React.createClass({
     render: function() {
-        var x = this.props.paddle.x
-        var y = this.props.paddle.y - HALF_PADDLE
+        var x = this.props.paddle.x - HALF_PADDLE_WIDTH
+        var y = this.props.paddle.y - HALF_PADDLE_HEIGHT
         return (
             <rect x={x} y={y} width={PADDLE_WIDTH} height={PADDLE_HEIGHT}/>
         )
@@ -55,10 +57,16 @@ var Paddle = React.createClass({
 })
 
 
-React.render(
-    <GameBoard height="50%" width="50%" viewBox="0 0 {GAMEBOARD_WIDTH} {GAMEBOARD_WIDTH}" gameState={gameState} >
-    </GameBoard>, document.getElementById("react-here")
-)
+window.setInterval(function() {
+    React.render(
+        <GameBoard width="50%" gameState={gameState} >
+        </GameBoard>, document.getElementById("react-here")
+    )
+}, 20)
+
+//KEYBOARD STUFF
+var listener = new window.keypress.Listener();
+
 
 
 function eventCoordinates(event) {
