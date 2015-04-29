@@ -1,0 +1,19 @@
+{
+  "name": "machine-learning-react",
+  "version": "0.0.0",
+  "description": "Playing with react!",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/argonauthills/machine-learning-react.git"
+  },
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/argonauthills/machine-learning-react/issues"
+  },
+  "homepage": "https://github.com/argonauthills/machine-learning-react"
+}
