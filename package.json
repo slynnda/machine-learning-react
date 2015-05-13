@@ -18,7 +18,8 @@
   "homepage": "https://github.com/argonauthills/machine-learning-react",
   "devDependencies": {
     "jsx-loader": "^0.13.2",
-    "webpack": "^1.8.10"
+    "webpack": "^1.8.10",
+    "webpack-dev-server": "^1.8.2"
   },
   "dependencies": {
     "lodash": "^3.7.0",
