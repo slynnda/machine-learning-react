@@ -15,6 +15,7 @@ var PADDLE_INSET = 2
 var PADDLE_MOVE_SPEED = 1
 
 var BALL_DEFAULT_SPEED = 1
+var BALL_RADIUS = 1
 
 var LEFT = "left"
 var RIGHT = "right"
@@ -68,8 +69,9 @@ var Ball = React.createClass({
     render: function() {
         var x = this.props.ball.position.x
         var y = this.props.ball.position.y
+        var r = this.props.ball.radius
         return (
-            <circle cx={x} cy={y} r="1"/>
+            <circle cx={x} cy={y} r={r}/>
         )
     }
 })
@@ -97,7 +99,7 @@ document.addEventListener("keydown", function(event) {
 })
 
 document.addEventListener("keyup", function(event) {
-    var code = event.keycode
+    var code = event.keyCode
     if (code == W_KEYCODE) {keysPressed.w = false; intentions.left = STAY}
     if (code == S_KEYCODE) {keysPressed.s = false; intentions.left = STAY}
     if (code == I_KEYCODE) {keysPressed.i = false; intentions.right = STAY}
@@ -106,16 +108,7 @@ document.addEventListener("keyup", function(event) {
 
 
 window.setInterval(function() {
-    // if (keysPressed.w && keysPressed.s) {}
-    // else if (keysPressed.w) {movePaddleUp(gameState.leftPaddle)}
-    // else if (keysPressed.s) {movePaddleDown(gameState.leftPaddle)}
-
-    // if (keysPressed.i && keysPressed.k) {}
-    // else if (keysPressed.i) {movePaddleUp(gameState.rightPaddle)}
-    // else if (keysPressed.k) {movePaddleDown(gameState.rightPaddle)}
     gameState = nextGameState(gameState, intentions.left, intentions.right)
-    console.log("gameState ball", gameState.ball.position, gameState.ball.velocity)
-
 }, 30)
 
 
@@ -146,7 +139,8 @@ function initialGameState(ballDirection) {
             velocity: {
                 x: (ballDirection == LEFT) ? -BALL_DEFAULT_SPEED : BALL_DEFAULT_SPEED,
                 y: 0
-            }
+            },
+            radius: BALL_RADIUS
         }
     }
 }
@@ -181,6 +175,30 @@ function nextBall(currentBall) {
     }
 }
 
+function ballCollisions(ball, shape) {
+    return
+}
+
+function ballCollision(ball, segment) {
+    var segLength = segmentLength(segment)
+    var transOrigin = segment.p1
+    var transV = vSubtract(segment.p1, transOrigin)
+    var scalar = scalarProjection(p, transV)
+    var projection = vAdd(newV, transOrigin)
+    var ballHeight = euclideanDistance(ball.position, projection)
+
+    var inSegmentShadow = scalar < segLength
+    var lowEnough = ballHeight < ball.radius
+
+    if (inSegmentShadow && lowEnough) {
+        return {
+            ballHeight: ballHeight,
+            location: projection,
+            percentOfSegment: scalar/segLength
+        }
+    } else return null
+}
+
 // GAME CONVENIENCE METHODS
 
 function paddleInitialY(paddle) {
@@ -190,6 +208,36 @@ function paddleFinalY(paddle) {
     return paddle.y + paddle.height/2
 }
 
+function paddleShape(paddle) {
+    return
+    // return {
+    //     x1: paddle.x,
+    //     x2: paddle.x,
+    //     y1: paddleInitialY(paddle),
+    //     y2: paddleFinalY(paddle)
+    // }
+}
+
+function rectShape(cx, cy, width, height) {
+    var halfWidth = width/2
+    var halfHeight = height/2
+    return [
+        //WORKING HERE
+
+    ]
+
+}
+
+function shapeToSegments (shape) {
+    nextPoints = cycle(shape, 1)
+    return _.zip(shape, nextPoints).map((pts) => {
+        return {
+            p1:pts[0],
+            p2:pts[1]
+        }
+    })
+}
+
 // MATH LIB
 function forceInRange(num, min, max) {
     return Math.max(min, Math.min(num, max))
@@ -197,4 +245,54 @@ function forceInRange(num, min, max) {
 
 function vAdd(v1, v2) {
     return {x:v1.x+v2.x, y:v1.y+v2.y}
+}
+
+function vSubtract(v1, v2) {
+    return {x:v1.x-v2.x, y:v1.y-v2.y}
+}
+
+function scalarMult(v, s) {
+    return {x:v.x*s, y:v.y*s}
+}
+
+function euclideanDistance(p1, p2) {
+    return pythagorean(p1.x-p2.x, p1.y-p2.y)
+}
+
+function euclideanNorm(v) {
+    return pythagorean(v.x, v.y)
+}
+
+function pythagorean(x, y) {
+    return Math.sqrt(x*x + y*y)
+}
+
+function projectOnLine(p, segment) {
+    var transOrigin = segment.p1
+    var v = vSubtract(segment.p1, transOrigin)
+    var scalar = scalarProjection(p, v)
+    var newV = scalarMult(v, scalar)
+    return vAdd(newV, transOrigin)
+}
+
+function scalarProjection(v, onV) {
+    return dotProd(v, onV) / euclideanNorm(onV)
+}
+
+function dotProd(v1, v2) {
+    return v1.x*v2.x + v1.y*v2.y
+}
+
+function segmentLength(segment) {
+    return euclideanDistance(segment.p1, segment.p2)
+}
+
+//  MODASH
+// function modIndex(array, index) {
+//     return array()
+// }
+
+function cycle(array, rotation) {
+    var index = rotation%array.length
+    return _.drop(array, index).concat(_.take(array, index))
 }
