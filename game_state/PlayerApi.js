@@ -3,7 +3,7 @@ var Config = require('./GameConfig.js');
 var movePaddleUp = function(paddle) {
   var currentPos = paddle.getPos();
   var dy = Config.game.tick.paddleStep;
-  paddle.setPos(currentPos.x, currentPos.y - dy; 
+  paddle.setPos(currentPos.x, currentPos.y - dy;
 };
 
 var movePaddleDown = function() {
