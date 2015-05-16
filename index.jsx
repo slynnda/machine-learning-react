@@ -9,24 +9,25 @@ var BOARD_HEIGHT = 100
 var BOARD_FINAL_X = BOARD_INITIAL_X + BOARD_WIDTH
 var BOARD_FINAL_Y = BOARD_INITIAL_Y + BOARD_HEIGHT
 var PADDLE_HEIGHT = 20
-var PADDLE_WIDTH = 3
+var PADDLE_WIDTH = 2
 var PADDLE_HALF_WIDTH = PADDLE_WIDTH/2
 var PADDLE_HALF_HEIGHT = PADDLE_HEIGHT/2
 var PADDLE_INSET = 2
 var PADDLE_MOVE_SPEED = 1
 
-var BALL_DEFAULT_SPEED = 1
-var BALL_RADIUS = 1
-var BALL_COLLISION_AVOIDANCE_STEP = BALL_DEFAULT_SPEED / 2
+var BALL_DEFAULT_SPEED = .5
+var BALL_ACCELERATION = 1
+var BALL_RADIUS = 1.5
+var BALL_COLLISION_AVOIDANCE_STEP = BALL_DEFAULT_SPEED / 4
 var BALL_MIN_Y = BOARD_INITIAL_Y + BALL_RADIUS
 var BALL_MAX_Y = BOARD_FINAL_Y - BALL_RADIUS
 
-var PADDLE_BALL_MAX_COLLISION_SPREAD = PADDLE_HEIGHT + PADDLE_HEIGHT
+var PADDLE_BALL_MAX_COLLISION_SPREAD = PADDLE_HEIGHT + BALL_RADIUS
 
-var STATE_UPDATE_INTERVAL = 20
-var VIEW_UPDATE_INTERVAL = 20
+var STATE_UPDATE_INTERVAL = 10
+var VIEW_UPDATE_INTERVAL = 10
 
-var MIN_ANGLE = Math.PI / 720
+var MIN_ANGLE = Math.PI / 6
 var LEFT_PADDLE_BOTTOM_ANGLE = (Math.PI / 2) - MIN_ANGLE
 var LEFT_PADDLE_TOP_ANGLE = (-1 * Math.PI / 2) + MIN_ANGLE
 var RIGHT_PADDLE_BOTTOM_ANGLE = (Math.PI / 2) + MIN_ANGLE
@@ -42,6 +43,8 @@ var WIN_LEFT = "win left"
 var WIN_RIGHT = "win right"
 var IN_PLAY = "in play"
 var BETWEEN_GAMES = "between games"
+
+var beep = new Audio("beep-high.wav"); // buffers automatically when created
 
 var keysPressed = {
     w: false,
@@ -133,6 +136,7 @@ function intention(upKey, downKey) {
 
 
 window.setInterval(function() {
+    if (hasCollisions(gameState)) beep.play()
     gameState = nextGameState(gameState, intention(keysPressed.w, keysPressed.s), intention(keysPressed.i, keysPressed.k))
 }, STATE_UPDATE_INTERVAL)
 
@@ -164,7 +168,8 @@ function initialGameState(ballDirection) {
                 x: (ballDirection == LEFT) ? -BALL_DEFAULT_SPEED : BALL_DEFAULT_SPEED,
                 y: 0
             }
-        }
+        },
+        mode: IN_PLAY
     }
 }
 
@@ -195,12 +200,16 @@ function nextBall(ball, leftPaddle, rightPaddle) {
     ball = handlePaddleCollision(ball, rightPaddle, RIGHT_PADDLE_TOP_ANGLE, RIGHT_PADDLE_BOTTOM_ANGLE)
     ball = handleWallCollisions(ball)
 
-    ball = handleBallMovement(ball)
     ball = clearColliders(ball, leftPaddle, rightPaddle)
+    ball = handleBallMovement(ball)
     return ball
 }
 
 // Collision stuff
+
+function hasCollisions(state) {
+    return collidesWithWall(state.ball) || collidesWithPaddle(state.ball, state.leftPaddle) || collidesWithPaddle(state.ball, state.rightPaddle)
+}
 
 function collidesWithWall(ball) {
     return ball.position.y <= BALL_MIN_Y || ball.position.y >= BALL_MAX_Y
@@ -213,7 +222,8 @@ function collidesWithPaddle(ball, paddle) {
 function paddleReflect(ball, paddle, topAngle, bottomAngle) {
      var whereCollision = ((ball.position.y - paddle.y) / PADDLE_BALL_MAX_COLLISION_SPREAD) + .5  // interval [0,1], with 0 at top of paddle
      var returnAngle = linearEval(whereCollision, topAngle, bottomAngle)
-     return vectorFromAngle(returnAngle, BALL_DEFAULT_SPEED)
+     var speed = euclideanNorm(ball.velocity) * BALL_ACCELERATION
+     return vectorFromAngle(returnAngle, speed)
 }
 
 function handleWallCollisions(ball) {
@@ -247,23 +257,41 @@ function handleBallMovement(ball) {
 
 function clearColliders(ball, leftPaddle, rightPaddle) {
     ball = clearWall(ball)
-    ball = clearPaddles(ball, leftPaddle, rightPaddle)
+    // ball = clearPaddles(ball, leftPaddle, rightPaddle)
     return ball
-
 }
 
 function clearPaddles(ball, leftPaddle, rightPaddle) {
-    if (collidesWithPaddle(ball, leftPaddle) || collidesWithPaddle(ball, rightPaddle)) {
-        var nearestLeft = nearestPaddlePoint(ball, leftPaddle)
-        var nearestRight = nearestPaddlePoint(ball, rightPaddle)
-        var minX = nearestLeft.x + vScalarMult(vNormalize(vSubtract(nearestLeft, ball.position)), BALL_RADIUS).x
-        var maxX = nearestRight.x + vScalarMult(vNormalize(vSubtract(nearestRight, ball.position)), BALL_RADIUS).x
-        return ballNewPosition(ball, forceInRange(ball.position.x, minX, maxX), ball.position.y)
+    console.log("clear", ball.position)
+    if (collidesWithPaddle(ball, leftPaddle)) {
+        return clearPaddles(ballNewPosition(ball, ball.position.x + BALL_COLLISION_AVOIDANCE_STEP, ball.position.y), leftPaddle, rightPaddle)
+    } else if (collidesWithPaddle(ball, rightPaddle)) {
+        return clearPaddles(ballNewPosition(ball, ball.position.x - BALL_COLLISION_AVOIDANCE_STEP, ball.position.y), leftPaddle, rightPaddle)
     } else {
         return ball
     }
-
 }
+
+// function clearPaddle(ball, paddle) {
+//     if (collidesWithPaddle(ball, paddle)) {
+//         var nearest = nearestPaddlePoint(ball, paddle)
+//         var diff =
+//         var neededDx = pythagoreanSide(vScalarMult(vNormalize(vSubtract(nearest, ball.position)), BALL_RADIUS).x
+//         return ballNewPosition(ball, {x:})
+//     }
+// }
+// function clearPaddles(ball, leftPaddle, rightPaddle) {
+//     if (collidesWithPaddle(ball, leftPaddle) || collidesWithPaddle(ball, rightPaddle)) {
+//         var nearestLeft = nearestPaddlePoint(ball, leftPaddle)
+//         var nearestRight = nearestPaddlePoint(ball, rightPaddle)
+//         var minX = nearestLeft.x + vScalarMult(vNormalize(vSubtract(nearestLeft, ball.position)), BALL_RADIUS).x
+//         var maxX = nearestRight.x + vScalarMult(vNormalize(vSubtract(nearestRight, ball.position)), BALL_RADIUS).x
+//         return ballNewPosition(ball, forceInRange(ball.position.x, minX, maxX), ball.position.y)
+//     } else {
+//         return ball
+//     }
+
+// }
 
 function clearWall(ball) {
     return ballNewPosition(ball, ball.position.x, forceInRange(ball.position.y, BALL_MIN_Y, BALL_MAX_Y))
@@ -367,4 +395,8 @@ function euclideanNorm(v) {
 
 function pythagorean(x, y) {
     return Math.sqrt(x*x + y*y)
+}
+
+function pythagoreanSide(hyp, a) {
+    return Math.sqrt(hyp*hyp - a*a)
 }
