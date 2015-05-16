@@ -11,20 +11,37 @@ var BOARD_FINAL_Y = BOARD_INITIAL_Y + BOARD_HEIGHT
 var PADDLE_HEIGHT = 20
 var PADDLE_WIDTH = 3
 var PADDLE_HALF_WIDTH = PADDLE_WIDTH/2
+var PADDLE_HALF_HEIGHT = PADDLE_HEIGHT/2
 var PADDLE_INSET = 2
 var PADDLE_MOVE_SPEED = 1
 
-var BALL_DEFAULT_SPEED = .5
-var BALL_RADIUS = 2
+var BALL_DEFAULT_SPEED = 1
+var BALL_RADIUS = 1
+var BALL_COLLISION_AVOIDANCE_STEP = BALL_DEFAULT_SPEED / 2
+var BALL_MIN_Y = BOARD_INITIAL_Y + BALL_RADIUS
+var BALL_MAX_Y = BOARD_FINAL_Y - BALL_RADIUS
 
-var STATE_UPDATE_INTERVAL = 30
-var VIEW_UPDATE_INTERVAL = 30
+var PADDLE_BALL_MAX_COLLISION_SPREAD = PADDLE_HEIGHT + PADDLE_HEIGHT
+
+var STATE_UPDATE_INTERVAL = 20
+var VIEW_UPDATE_INTERVAL = 20
+
+var MIN_ANGLE = Math.PI / 720
+var LEFT_PADDLE_BOTTOM_ANGLE = (Math.PI / 2) - MIN_ANGLE
+var LEFT_PADDLE_TOP_ANGLE = (-1 * Math.PI / 2) + MIN_ANGLE
+var RIGHT_PADDLE_BOTTOM_ANGLE = (Math.PI / 2) + MIN_ANGLE
+var RIGHT_PADDLE_TOP_ANGLE = (Math.PI * 3 / 2) - MIN_ANGLE
 
 var LEFT = "left"
 var RIGHT = "right"
 var UP = "up"
 var DOWN = "down"
 var STAY = "stay"
+
+var WIN_LEFT = "win left"
+var WIN_RIGHT = "win right"
+var IN_PLAY = "in play"
+var BETWEEN_GAMES = "between games"
 
 var keysPressed = {
     w: false,
@@ -38,17 +55,9 @@ var intentions = {
     right: STAY
 }
 
-//collisionFunc (ball, collision) => ball
-
 
 var initialBallDirection = (Math.random() > .5) ? LEFT : RIGHT
 var gameState = initialGameState(initialBallDirection)
-var gameBoard = {
-    walls: [
-        newWall(BOARD_INITIAL_X, BOARD_INITIAL_Y, BOARD_FINAL_X, BOARD_INITIAL_Y),
-        newWall(BOARD_INITIAL_X, BOARD_FINAL_Y, BOARD_FINAL_X, BOARD_FINAL_Y),
-    ]
-}
 
 // VIEW
 
@@ -68,10 +77,10 @@ var GameBoard = React.createClass({
 var Paddle = React.createClass({
     render: function() {
         var paddle = this.props.paddle
-        var cx = paddleInitialCX(paddle)
-        var cy = paddleInitialCY(paddle)
+        var x = paddleInitialX(paddle)
+        var y = paddleInitialY(paddle)
         return (
-            <rect x={cx} y={cy} width={paddle.width} height={paddle.height}/>
+            <rect x={x} y={y} width={PADDLE_WIDTH} height={PADDLE_HEIGHT}/>
         )
     }
 })
@@ -80,9 +89,8 @@ var Ball = React.createClass({
     render: function() {
         var x = this.props.ball.position.x
         var y = this.props.ball.position.y
-        var r = this.props.ball.radius
         return (
-            <circle cx={x} cy={y} r={r}/>
+            <circle cx={x} cy={y} r={BALL_RADIUS}/>
         )
     }
 })
@@ -117,9 +125,15 @@ document.addEventListener("keyup", function(event) {
     if (code == K_KEYCODE) {keysPressed.k = false; intentions.right = STAY}
 })
 
+function intention(upKey, downKey) {
+    if (upKey && !downKey) return UP
+    else if (downKey && !upKey) return DOWN
+    else return STAY
+}
+
 
 window.setInterval(function() {
-    gameState = nextGameState(gameState, intentions.left, intentions.right, gameBoard)
+    gameState = nextGameState(gameState, intention(keysPressed.w, keysPressed.s), intention(keysPressed.i, keysPressed.k))
 }, STATE_UPDATE_INTERVAL)
 
 
@@ -133,19 +147,13 @@ function initialGameState(ballDirection) {
     var halfPaddleHeight = PADDLE_HEIGHT/2
     var halfPaddleWidth = PADDLE_WIDTH/2
     return {
-        leftPaddle: {
-            cx: PADDLE_INSET,
-            cy: halfBoardHeight,
-            height: halfPaddleHeight,
-            width: halfPaddleWidth,
-            collisionFunc: reflectOnCollision
+        leftPaddle: { // center of rect position
+            x: PADDLE_INSET,
+            y: halfBoardHeight,
         },
         rightPaddle: {
-            cx: BOARD_WIDTH - PADDLE_INSET,
-            cy: halfBoardHeight,
-            height: halfPaddleHeight,
-            width: halfPaddleWidth,
-            collisionFunc: reflectOnCollision
+            x: BOARD_WIDTH - PADDLE_INSET,
+            y: halfBoardHeight,
         },
         ball: {
             position: {
@@ -155,174 +163,182 @@ function initialGameState(ballDirection) {
             velocity: {
                 x: (ballDirection == LEFT) ? -BALL_DEFAULT_SPEED : BALL_DEFAULT_SPEED,
                 y: 0
-            },
-            radius: BALL_RADIUS
+            }
         }
     }
 }
 
-function nextGameState(currentState, leftIntention, rightIntention, gameBoard) {
+function nextGameState(state, leftIntention, rightIntention) {
+    var newLeft = nextPaddle(state.leftPaddle, leftIntention)
+    var newRight = nextPaddle(state.rightPaddle, rightIntention)
     return {
-        leftPaddle: nextPaddle(currentState.leftPaddle, leftIntention),
-        rightPaddle: nextPaddle(currentState.rightPaddle, rightIntention),
-        ball: nextBall(currentState.ball, gameBoard.walls, currentState.leftPaddle, currentState.rightPaddle)
+        leftPaddle: newLeft,
+        rightPaddle: newRight,
+        ball: nextBall(state.ball, newLeft, newRight) // We execute player's latest move before calculating ball collisions.
     }
 }
 
-function nextPaddle(currentPaddle, intention) {
-    var halfPaddle = currentPaddle.height/2
+function nextPaddle(paddle, intention) {
     var dy;
     if (!intention || intention == STAY) dy = 0
     else if (intention == UP) dy = -PADDLE_MOVE_SPEED
     else if (intention == DOWN) dy = PADDLE_MOVE_SPEED
     else throw new Error("invalid intention " + intention)
     return {
-        cx: currentPaddle.cx,
-        cy: forceInRange(currentPaddle.cy + dy, BOARD_INITIAL_Y + halfPaddle, BOARD_FINAL_Y - halfPaddle),
-        height: currentPaddle.height,
-        width: currentPaddle.width,
-        collisionFunc: currentPaddle.collisionFunc
+        x: paddle.x,
+        y: forceInRange(paddle.y + dy, BOARD_INITIAL_Y + PADDLE_HALF_HEIGHT, BOARD_FINAL_Y - PADDLE_HALF_HEIGHT),
     }
 }
 
-function nextBall(currentBall, walls, leftPaddle, rightPaddle) {
-    var leftPaddleSegments = shapeToSegments(paddleShape(leftPaddle))
-    var rightPaddleSegments = shapeToSegments(paddleShape(rightPaddle))
-    var leftPaddleCollisions = ballCollisions(currentBall, leftPaddleSegments)
-    var rightPaddleCollisions = ballCollisions(currentBall, rightPaddleSegments)
+function nextBall(ball, leftPaddle, rightPaddle) {
+    ball = handlePaddleCollision(ball, leftPaddle, LEFT_PADDLE_TOP_ANGLE, LEFT_PADDLE_BOTTOM_ANGLE)
+    ball = handlePaddleCollision(ball, rightPaddle, RIGHT_PADDLE_TOP_ANGLE, RIGHT_PADDLE_BOTTOM_ANGLE)
+    ball = handleWallCollisions(ball)
 
-
-    var ballAfterRights = handleCollisions(currentBall, rightPaddleCollisions, rightPaddle.collisionFunc)
-    var ballAfterLefts = handleCollisions(ballAfterRights, leftPaddleCollisions, leftPaddle.collisionFunc)
-
-    var ball = ballAfterLefts
-
-    return {
-        position: vAdd(ball.position, ball.velocity),
-        velocity: ball.velocity,
-        radius: ball.radius
-    }
+    ball = handleBallMovement(ball)
+    ball = clearColliders(ball, leftPaddle, rightPaddle)
+    return ball
 }
 
 // Collision stuff
-function handleCollisions(ball, collisions, collisionFunc) {
-    // if (collisions.length < 1) return ball
-    return collisions.reduce(function(b, c){
-        return collisionFunc(b, c)
-    }, ball)
+
+function collidesWithWall(ball) {
+    return ball.position.y <= BALL_MIN_Y || ball.position.y >= BALL_MAX_Y
 }
 
-function ballCollisions(ball, segments) {
-    return _.compact(segments.map(function(s) {
-        return ballCollision(ball, s)
-    }))
+function collidesWithPaddle(ball, paddle) {
+    return euclideanDistance(ball.position, nearestPaddlePoint(ball, paddle)) < BALL_RADIUS
 }
 
-function ballCollision(ball, segment) {
-    var segLength = segmentLength(segment)
-    var transOrigin = segment.p1
-    var transV = vSubtract(segment.p2, transOrigin)
-    var transBall = vSubtract(ball.position, transOrigin)
-    var scalar = scalarProjection(transBall, transV)
-    var transProjection = scalarMult(transV, scalar/segLength)
-    var projection = vAdd(transProjection, transOrigin)
-    var ballHeight = euclideanDistance(ball.position, projection)
-    // console.log("ball", ball.position, "segment", segment.p1, segment.p2, "transV", transV,
-    //     "transBall", transBall, "scalar", scalar, "transProjection", transProjection,
-    //     "projection", projection, "ballHeight", ballHeight, "segLength", segLength
-    // )
+function paddleReflect(ball, paddle, topAngle, bottomAngle) {
+     var whereCollision = ((ball.position.y - paddle.y) / PADDLE_BALL_MAX_COLLISION_SPREAD) + .5  // interval [0,1], with 0 at top of paddle
+     var returnAngle = linearEval(whereCollision, topAngle, bottomAngle)
+     return vectorFromAngle(returnAngle, BALL_DEFAULT_SPEED)
+}
 
-
-    var inSegmentShadow = Math.abs(scalar) < segLength
-    var lowEnough = ballHeight <= ball.radius
-
-    if (inSegmentShadow && lowEnough) {
+function handleWallCollisions(ball) {
+    if (collidesWithWall(ball)) {
         return {
-            ballHeight: ballHeight,
-            location: projection,
-            percentOfSegment: Math.abs(scalar),  // /seglength
-            segment: segment
+            position: ball.position,
+            velocity: vReflectY(ball.velocity)
         }
-    } else return null
-}
-
-function reflectOnCollision(ball, collision) {
-    var colliderVector = vSubtract(collision.segment.p1, collision.segment.p2)
-    return {
-        position: ball.position,
-        velocity: vReflect(ball.velocity, colliderVector),
-        radius: ball.radius
+    } else {
+        return ball
     }
 }
 
-function simplePaddleReflection(ball, collision) {
-    var colliderVector = vSubtract(collision.segment.p1, collision.segment.p2)
-    var maxScaleX = 2
-    var scaleX = Math.abs(collision.percentOfSegment -.5)* 2 * (maxScaleX -1) + 1
-    return {
-        position: ball.position,
-        velocity: vReflectWithMoreX(ball.velocity, colliderVector, scaleX)
+function handlePaddleCollision(ball, paddle, topAngle, bottomAngle) {
+    if (collidesWithPaddle(ball, paddle)) {
+        return {
+            position: ball.position,
+            velocity: paddleReflect(ball, paddle, topAngle, bottomAngle)
+        }
+    } else {
+        return ball
     }
 }
+
+function handleBallMovement(ball) {
+    return {
+        position: vAdd(ball.position, ball.velocity),
+        velocity: ball.velocity
+    }
+}
+
+function clearColliders(ball, leftPaddle, rightPaddle) {
+    ball = clearWall(ball)
+    ball = clearPaddles(ball, leftPaddle, rightPaddle)
+    return ball
+
+}
+
+function clearPaddles(ball, leftPaddle, rightPaddle) {
+    if (collidesWithPaddle(ball, leftPaddle) || collidesWithPaddle(ball, rightPaddle)) {
+        var nearestLeft = nearestPaddlePoint(ball, leftPaddle)
+        var nearestRight = nearestPaddlePoint(ball, rightPaddle)
+        var minX = nearestLeft.x + vScalarMult(vNormalize(vSubtract(nearestLeft, ball.position)), BALL_RADIUS).x
+        var maxX = nearestRight.x + vScalarMult(vNormalize(vSubtract(nearestRight, ball.position)), BALL_RADIUS).x
+        return ballNewPosition(ball, forceInRange(ball.position.x, minX, maxX), ball.position.y)
+    } else {
+        return ball
+    }
+
+}
+
+function clearWall(ball) {
+    return ballNewPosition(ball, ball.position.x, forceInRange(ball.position.y, BALL_MIN_Y, BALL_MAX_Y))
+}
+
 
 // GAME CONVENIENCE METHODS
 
-function paddleInitialCY(paddle) {
-    return paddle.cy - paddle.height/2
-}
-function paddleFinalCY(paddle) {
-    return paddle.cy + paddle.height/2
+function ballNewPosition(ball, x, y) {
+    return newBall({x:x, y:y}, ball.velocity)
 }
 
-function paddleInitialCX(paddle) {
-    return paddle.cx - paddle.width/2
-}
-function paddleFinalCX(paddle) {
-    return paddle.cx + paddle.width/2
-}
-
-function newWall(x1, y1, x2, y2) {
+function nearestPaddlePoint(ball, paddle) {
     return {
-        segment: newSegment(x1, y1, x2, y2),
-        collisionFunc: reflectOnCollision
+        x: forceInRange(ball.position.x, paddle.x - PADDLE_HALF_WIDTH, paddle.x + PADDLE_HALF_WIDTH),
+        y: forceInRange(ball.position.y, paddle.y - PADDLE_HALF_HEIGHT, paddle.y + PADDLE_HALF_HEIGHT)
     }
 }
 
-function newSegment(x1, y1, x2, y2) {
+function nearestPaddlePointOnLeft(ball, paddle) {
     return {
-        p1: { x:x1, y:y1 },
-        p2: { x:x2, y:y2 }
+        x: paddle.x - PADDLE_HALF_WIDTH,
+        y: forceInRange(ball.position.y, paddle.y - PADDLE_HALF_HEIGHT, paddle.y + PADDLE_HALF_HEIGHT)
     }
 }
 
-function paddleShape(paddle) {
-    return rectShape(paddle.cx, paddle.cy, paddle.width, paddle.height)
+function nearestPaddlePointOnRight(ball, paddle) {
+    return {
+        x: paddle.x + PADDLE_HALF_WIDTH,
+        y: forceInRange(ball.position.y, paddle.y - PADDLE_HALF_HEIGHT, paddle.y + PADDLE_HALF_HEIGHT)
+    }
 }
 
-function rectShape(cx, cy, width, height) {
-    var halfWidth = width/2
-    var halfHeight = height/2
-    return [  //note: order matters for building segments
-        {x:cx+halfWidth, y:cy+halfHeight},
-        {x:cx+halfWidth, y:cy-halfHeight},
-        {x:cx-halfWidth, y:cy-halfHeight},
-        {x:cx-halfWidth, y:cy+halfHeight},
-    ]
+function newBall(pos, vel) {
+    return {
+        position: pos,
+        velocity: vel
+    }
 }
 
-function shapeToSegments (shape) {
-    nextPoints = cycle(shape, 1)
-    return _.zip(shape, nextPoints).map(function(pts) {
-        return {
-            p1:pts[0],
-            p2:pts[1]
-        }
-    })
+function paddleInitialY(paddle) {
+    return paddle.y - PADDLE_HALF_HEIGHT
+}
+function paddleFinalY(paddle) {
+    return paddle.y + PADDLE_HALF_HEIGHT
+}
+
+function paddleInitialX(paddle) {
+    return paddle.x - PADDLE_HALF_WIDTH
+}
+function paddleFinalX(paddle) {
+    return paddle.x + PADDLE_HALF_WIDTH
 }
 
 // MATH LIB
+function vReflectY(v) {
+    return {
+        x: v.x,
+        y: -v.y
+    }
+}
+
+function vectorFromAngle(radians, magnitude) {
+    return {
+        x: Math.cos(radians) * magnitude,
+        y: Math.sin(radians) * magnitude
+    }
+}
+
 function forceInRange(num, min, max) {
     return Math.max(min, Math.min(num, max))
+}
+
+function linearEval(x, yAt0, yAt1) {
+    return (yAt1 - yAt0) * x + yAt0
 }
 
 function vAdd(v1, v2) {
@@ -334,30 +350,10 @@ function vSubtract(v1, v2) {
 }
 
 function vNormalize(v) {
-    return scalarMult(v, 1/euclideanNorm(v))
+    return vScalarMult(v, 1/euclideanNorm(v))
 }
 
-function vReflect(v, withRespectTo) {
-    var projection = vProject(v, withRespectTo)
-    var elevation = vSubtract(v, projection)
-    return vAdd(vInvert(elevation), projection)
-}
-
-function vReflectWithMoreX(v, withRespectTo, scaleX) {
-    var projection = vProject(v, withRespectTo)
-    var elevation = vSubtract(v, projection)
-    return vAdd(scalarMult(vInvert(elevation), scaleX), projection)
-}
-
-function vInvert(v) {
-    return { x:-v.x, y:-v.y }
-}
-
-function vProject(v, onV) {
-    return scalarMult(onV, scalarProjection(v, onV))
-}
-
-function scalarMult(v, s) {
+function vScalarMult(v, s) {
     return { x:v.x*s, y:v.y*s }
 }
 
@@ -371,34 +367,4 @@ function euclideanNorm(v) {
 
 function pythagorean(x, y) {
     return Math.sqrt(x*x + y*y)
-}
-
-function projectOnLine(p, segment) {
-    var transOrigin = segment.p1
-    var v = vSubtract(segment.p1, transOrigin)
-    var scalar = scalarProjection(p, v)
-    var newV = scalarMult(v, scalar)
-    return vAdd(newV, transOrigin)
-}
-
-function scalarProjection(v, onV) {
-    return dotProd(v, onV) / euclideanNorm(onV)
-}
-
-function dotProd(v1, v2) {
-    return v1.x*v2.x + v1.y*v2.y
-}
-
-function segmentLength(segment) {
-    return euclideanDistance(segment.p1, segment.p2)
-}
-
-//  MODASH
-// function modIndex(array, index) {
-//     return array()
-// }
-
-function cycle(array, rotation) {
-    var index = rotation%array.length
-    return _.drop(array, index).concat(_.take(array, index))
 }
