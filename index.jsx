@@ -68,8 +68,14 @@ var gameState = initialGameState(initialBallDirection)
 var GameBoard = React.createClass({
     render: function() {
         var viewBox = [BOARD_INITIAL_X, BOARD_INITIAL_Y, BOARD_WIDTH, BOARD_HEIGHT].join(" ")
+        var style = {
+            margin: "0 auto",
+            width: "90vh",
+            display: "block",
+            border: "black solid 5px"
+        }
         return (
-            <svg {...this.props} viewBox={viewBox}>
+            <svg {...this.props} style={style} viewBox={viewBox}>
                 <Paddle paddle={this.props.gameState.leftPaddle}/>
                 <Paddle paddle={this.props.gameState.rightPaddle}/>
                 <Ball ball={this.props.gameState.ball}/>
