@@ -45,7 +45,10 @@ var WIN_RIGHT = "win right"
 var IN_PLAY = "in play"
 var BETWEEN_GAMES = "between games"
 
+var goBeep = new Audio("go.wav")
+var countdownBeep = new Audio("countdown.wav")
 var beep = new Audio("beep-high.wav"); // buffers automatically when created
+var youLoseBeep = new Audio("you-lose.wav")
 
 var keysPressed = {
     w: false,
@@ -59,9 +62,23 @@ var intentions = {
     right: STAY
 }
 
+var gameStages = {
+    preGame: "pre game",
+    inPlay: "in play",
+    postGame: "post game"
+}
 
-var initialBallDirection = (Math.random() > .5) ? LEFT : RIGHT
-var gameState = initialGameState(initialBallDirection)
+function initialBallDirection() {
+    return (Math.random() > .5) ? LEFT : RIGHT
+}
+
+var gameState = initialGameState(initialBallDirection())
+
+var viewState = {
+    gameStage: gameStages.preGame,
+    lastChangeAt : Date.now(),
+    previousWinner: null
+}
 
 // VIEW
 
@@ -105,11 +122,32 @@ var Ball = React.createClass({
     }
 })
 
+// var StartMessage = React.createClass({
+//     render: function() {
+//         return (
+//             <div>
+//                 {this.props.startMessage}
+//                 {for (var i = this.props.countdownNumber; i > -1; i--) {
+//                 }}
+//             </div>
+//         )
+//     }
+// })
+
+var StartNumber = React.createClass({
+    render: function() {
+        var num = 3 - Math.floor((Date.now() - this.props.viewState.lastChangeAt) / 1000)
+        return <div>asdf{num}{this.props.viewState.gameStage}</div>
+    }
+})
+
 
 window.setInterval(function() {
     React.render(
-        <GameBoard width="50%" gameState={gameState} >
-        </GameBoard>, document.getElementById("react-here")
+        <div>
+            <StartNumber viewState={viewState}></StartNumber>
+            <GameBoard width="50%" gameState={gameState} ></GameBoard>
+        </div>, document.getElementById("react-here")
     )
 }, VIEW_UPDATE_INTERVAL)
 
@@ -143,10 +181,42 @@ function intention(upKey, downKey) {
 
 
 window.setInterval(function() {
-    if (hasCollisions(gameState)) beep.play()
-    gameState = nextGameState(gameState, intention(keysPressed.w, keysPressed.s), intention(keysPressed.i, keysPressed.k))
+    if (viewState.gameStage == gameStages.preGame) pregameTick()
+    else if (viewState.gameStage == gameStages.inPlay) inPlayTick()
+    else if (viewState.gameStage == gameStages.postGame) gameEndTick()
 }, STATE_UPDATE_INTERVAL)
 
+function pregameTick() {
+    var now = Date.now()
+    var elapsed = now - viewState.lastChangeAt
+    if (elapsed%1000 < 20 && elapsed< 2500) countdownBeep.play()
+    if (elapsed > 3000) {
+        goBeep.play()
+        setGameStage(gameStages.inPlay)
+    }
+}
+
+function inPlayTick() {
+    if (hasCollisions(gameState)) beep.play()
+    gameState = nextGameState(gameState, intention(keysPressed.w, keysPressed.s), intention(keysPressed.i, keysPressed.k))
+
+    if (isRightWinner(gameState)) viewState.previousWinner = RIGHT
+    if (isLeftWinner(gameState)) viewState.previousWinner = LEFT
+    if (isGameOver(gameState)) setGameStage(gameStages.postGame)
+}
+
+function gameEndTick() {
+    gameState = initialGameState(initialBallDirection())
+    youLoseBeep.play()
+    setGameStage(gameStages.preGame)
+}
+
+
+// GAME VIEW STUFF
+function setGameStage(stageName) {
+    viewState.gameStage = stageName
+    viewState.lastChangeAt = Date.now()
+}
 
 
 
@@ -210,6 +280,18 @@ function nextBall(ball, leftPaddle, rightPaddle) {
     ball = clearColliders(ball, leftPaddle, rightPaddle)
     ball = handleBallMovement(ball)
     return ball
+}
+
+function isLeftWinner(state) {
+    return state.ball.position.x - BALL_RADIUS < BOARD_INITIAL_X
+}
+
+function isRightWinner(state) {
+    return state.ball.position.x + BALL_RADIUS > BOARD_FINAL_X
+}
+
+function isGameOver(state) {
+    return isLeftWinner(state) || isRightWinner(state)
 }
 
 // Collision stuff
